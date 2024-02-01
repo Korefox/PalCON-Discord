@@ -41,6 +41,7 @@ We have currently switched to [tama's implementation](https://github.com/ttk1/py
 5. Use `start.bat`/`start.sh` to run the Discord Bot!
     - Log files are saved to `/logs` and rotated at midnight.
     - Log files are automatically excluded from git
+5. The first time you run the bot, you will need to run the `!sync` command to sync the slash commands to Discord
 
 ### Installing Python 3.11 on Ubuntu Jammy
 *Credits: Adapted from [an article Rehan Haider](https://cloudbytes.dev/snippets/upgrade-python-to-latest-version-on-ubuntu-linux)*
