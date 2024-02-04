@@ -4,6 +4,8 @@ import discord
 from discord import app_commands
 from discord.ext.commands import has_permissions
 
+import requests
+
 from client import fetch_config, Client
 import logger
 
@@ -66,6 +68,61 @@ async def info(interaction: discord.Interaction):
     else:
         await interaction.response.send_message(error)
 
+@tree.command(
+    name="status",
+    description="Check server status",
+)
+async def status(interaction: discord.Interaction):
+    embed_message = None
+    current_ip_status = None
+    expected_ip = config["expected_public_ip"]
+    error = config["generic_bot_error"]
+    if expected_ip == "":
+        log.info(f"Skipping public IP check.")
+        current_ip_status = True
+    else:
+        log.info(f"Fetching current public IP...")
+        current_ip = requests.get('https://api.ipify.org/').text
+        if current_ip == expected_ip:
+            log.info(f"Current IP matches expected IP.")
+            current_ip_status = True
+        else:
+            log.warning(f"Current IP ({current_ip}) did not match expected IP ({expected_ip})")
+            current_ip_status = False
+    try:
+        rcon_client = Client(config=config)
+        server_info, error_message = rcon_client.info()
+        if error_message:
+            error = error_message
+        if server_info and current_ip_status:
+            embed_message = discord.Embed(
+                title=f"Server is online.",
+                colour=discord.Colour.blurple(),
+                description=f"{server_info.name}{server_info.version}\n\n No issues detected.",
+            )
+            format_embed(embed_message)
+        elif server_info and not current_ip_status:
+            embed_message = discord.Embed(
+                title=f"The server IP changed.",
+                colour=discord.Colour.blurple(),
+                description=f"{server_info.name}{server_info.version}\n\nNew server IP detected.\n {current_ip}",
+            )
+            format_embed(embed_message)
+    except Exception as e:
+        log.error(f"Unable to fetch/send game server info: {e}")
+        try:
+            embed_message = discord.Embed(
+                title=f"Server is unavailable.",
+                colour=discord.Colour.blurple(),
+                description=f"We couldn't contact the server.\n\n The server may be offline, unresponsive, or the associated IP may have changed.\n\nhttps://palworld.statuspage.io/",
+            )
+            format_embed(embed_message)
+        except Exception as e:
+            log.error(f"Unable to send discord message: {e}")
+    if embed_message:
+        await interaction.response.send_message(embed=embed_message)
+    else:
+        await interaction.response.send_message(error)
 
 @tree.command(
     name="online",
