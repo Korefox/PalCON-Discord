@@ -1,5 +1,7 @@
 import tomllib
 
+import requests
+
 from rcon import Console
 from rcon.async_support import Console as AsyncConsole
 
@@ -100,6 +102,65 @@ class Client:
             error_message = self.GENERIC_ERROR
 
         return server_info, error_message
+
+    def check_current_ip(self):
+        expected_ip = self.CONFIG["expected_public_ip"]
+        ip_match = None
+        current_ip = None
+        ip_description = None
+
+        emoji_pass = self.CONFIG["embed_pass_emoji"]
+        emoji_fail = self.CONFIG["embed_fail_emoji"]
+        emoji_unknown = self.CONFIG["embed_unknown_emoji"]
+
+        if expected_ip == "":
+                log.info(f"Skipping IP check.")
+                ip_match = True
+        else:
+            log.info(f"Fetching current public IP from ipify...")
+            try:
+                # response is the IP address with no decorators.
+                current_ip = requests.get('https://api.ipify.org/').text
+
+                if current_ip == expected_ip:
+                    log.info(f"Current IP matches expected IP.")
+                    ip_description = (f"\n\n{emoji_pass} - IP address")
+                    ip_match = True
+                else:
+                    log.error(f"Current IP ({current_ip}) did not match expected IP ({expected_ip}) from ipify.")
+                    ip_description = (f"\n\n{emoji_fail} - IP address\n- Server IP changed to: {current_ip}")
+                    ip_match = False
+            except requests.exceptions.Timeout:
+                log.error(f"Request timed out. Giving up.")
+                ip_description = (f"\n\n{emoji_unknown} - IP address\n- [Error] IP check timed out.")
+                ip_match = False
+            except requests.exceptions.RequestException as e:
+                log.error(f"IP request could not be processed. {e}")
+                ip_description = (f"\n\n{emoji_unknown} - IP address\n- [Error] Failed to fetch current IP.")
+                ip_match = False
+
+        if not ip_match:
+            current_ip_retry = None
+
+            log.info(f"Fetching current public IP from whatismyip...")
+            try:
+                # response is the IP address with no decorators.
+                current_ip_retry = requests.get('http://ipgrab.io').text
+                if current_ip_retry == expected_ip:
+                    log.info(f"Retry result: Current IP matches expected IP on second try.")
+                    ip_description = (f"\n{emoji_pass} - IP address")
+                elif current_ip_retry == current_ip:
+                    log.warning(f"Retry result: Both IP checks failed.")
+                else:
+                    log.warning(f"Retry result: Current IP ({current_ip_retry}) did not match expected IP ({expected_ip})")
+            except requests.exceptions.Timeout:
+                log.error(f"Request timed out. Giving up.")
+                ip_description = ip_description + (f"\n- [Error] Second IP check timed out.")
+            except requests.exceptions.RequestException as e:
+                log.error(f"IP request could not be processed. {e}")
+                ip_description = ip_description + (f"\n- [Error] Second IP verification failed.")
+
+        return ip_description
 
     def save(self) -> str:
         log.debug("Saving world")

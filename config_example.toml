@@ -15,3 +15,10 @@ generic_bot_error = "Unable to process your request"
 # Warning: On fail, exposes the PalCON bot's current IP address to discord.
 # Leave this blank to disable this feature.
 expected_public_ip = ""
+
+# Emojis used for the /status description.
+# Can be replaced with custom emojis.
+# The bot must be in the server the emoji belongs to.
+embed_pass_emoji = ":white_check_mark:"
+embed_fail_emoji = ":no_entry:"
+embed_unknown_emoji = ":grey_question:"
