@@ -1,6 +1,8 @@
 # Modification mentions
 This version of PalCON-Discord originates from [KOOKIIEStudios' project](https://github.com/KOOKIIEStudios/PalCON-Discord) and cherry-picks code from [alexraskin's palCON repo](https://github.com/alexraskin/PalCON-Discord).
 
+- Adds a /status command that tells discord users if the server is online, offline, or if the palworld server IP has changed. (Requires PalCON-Discord bot be on the same local network.)
+
 Original README.md below:
 
 # PalCON Discord
