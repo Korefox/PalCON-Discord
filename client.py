@@ -59,6 +59,26 @@ def get_indices_from_info(res: str) -> tuple[int, int, int]:
     return version_number_start_index, version_number_end_index, name_index
 
 
+def fetch_current_ip(website_link, expected_ip):
+    current_ip = None
+    try:
+        # Expected response is the IP address with no decorators.
+        current_ip = requests.get(website_link).text
+        if current_ip == expected_ip:
+            log.info("Current IP matches expected IP.")
+            ip_match = True
+        else:
+            log.warning(f"Current IP ({current_ip}) did not match expected IP ({expected_ip}).")
+            ip_match = False
+    except requests.exceptions.Timeout:
+        log.error(f"Request timed out. Giving up.")
+        ip_match = None
+    except requests.exceptions.RequestException as e:
+        log.error(f"IP request could not be processed. {e}")
+        ip_match = None
+    return current_ip, ip_match
+
+
 # ------------------------------------------------------------------------------
 # Synchronous implementation; manually starts and stops a connection with every command
 class Client:
@@ -69,6 +89,50 @@ class Client:
             self.CONFIG = config
         else:
             self.CONFIG = fetch_config()
+
+    def check_current_ip(self):
+        expected_ip = self.CONFIG["expected_public_ip"]
+        log.info(f"Fetching current public IP from ipify...")
+        current_ip, ip_match = fetch_current_ip('https://api.ipify.org/', expected_ip)
+
+        if not ip_match:
+            log.info(f"Fetching current public IP from ipgrab...")
+            current_ip, ip_match = fetch_current_ip('http://ipgrab.io', expected_ip)
+
+        match ip_match:
+            case True:
+                emoji_pass = self.CONFIG["embed_pass_emoji"]
+                ip_result = (f"{emoji_pass} - IP address")
+            case False:
+                emoji_fail = self.CONFIG["embed_fail_emoji"]
+                ip_result = (f"{emoji_fail} - IP address\n- Changed to: {current_ip}")
+            case None:
+                emoji_unknown = self.CONFIG["embed_unknown_emoji"]
+                ip_result = (f"{emoji_unknown} - IP address\n- Couldn't verify server IP.")
+
+        return ip_result
+    
+    # Main function to handle all checks in /status
+    def status_checks(self):
+        check_public_ip = self.CONFIG["check_public_ip"]
+        description_list = []
+
+        try:
+            server_info, error_message = self.info()
+            if server_info:
+                embed_title = "Server is online."
+                description_list.append(server_info.name+server_info.version)
+        except Exception as e:      
+            log.error(f"Unable to fetch/send game server info: {e}")
+            embed_title = "Server is unavailable."
+            description_list.append("We couldn't contact the server.\nhttps://palworld.statuspage.io/")
+            
+        if check_public_ip:
+            description_list.append(self.check_current_ip())
+        
+        embed_description='\n\n'.join(description_list)
+
+        return embed_title, embed_description
 
     def open(self) -> Console:
         return Console(
@@ -103,65 +167,6 @@ class Client:
 
         return server_info, error_message
 
-    def check_current_ip(self):
-        expected_ip = self.CONFIG["expected_public_ip"]
-        ip_match = None
-        current_ip = None
-        ip_description = None
-
-        emoji_pass = self.CONFIG["embed_pass_emoji"]
-        emoji_fail = self.CONFIG["embed_fail_emoji"]
-        emoji_unknown = self.CONFIG["embed_unknown_emoji"]
-
-        if expected_ip == "":
-                log.info(f"Skipping IP check.")
-                ip_match = True
-        else:
-            log.info(f"Fetching current public IP from ipify...")
-            try:
-                # response is the IP address with no decorators.
-                current_ip = requests.get('https://api.ipify.org/').text
-
-                if current_ip == expected_ip:
-                    log.info(f"Current IP matches expected IP.")
-                    ip_description = (f"\n\n{emoji_pass} - IP address")
-                    ip_match = True
-                else:
-                    log.error(f"Current IP ({current_ip}) did not match expected IP ({expected_ip}) from ipify.")
-                    ip_description = (f"\n\n{emoji_fail} - IP address\n- Server IP changed to: {current_ip}")
-                    ip_match = False
-            except requests.exceptions.Timeout:
-                log.error(f"Request timed out. Giving up.")
-                ip_description = (f"\n\n{emoji_unknown} - IP address\n- [Error] IP check timed out.")
-                ip_match = False
-            except requests.exceptions.RequestException as e:
-                log.error(f"IP request could not be processed. {e}")
-                ip_description = (f"\n\n{emoji_unknown} - IP address\n- [Error] Failed to fetch current IP.")
-                ip_match = False
-
-        if not ip_match:
-            current_ip_retry = None
-
-            log.info(f"Fetching current public IP from whatismyip...")
-            try:
-                # response is the IP address with no decorators.
-                current_ip_retry = requests.get('http://ipgrab.io').text
-                if current_ip_retry == expected_ip:
-                    log.info(f"Retry result: Current IP matches expected IP on second try.")
-                    ip_description = (f"\n{emoji_pass} - IP address")
-                elif current_ip_retry == current_ip:
-                    log.warning(f"Retry result: Both IP checks failed.")
-                else:
-                    log.warning(f"Retry result: Current IP ({current_ip_retry}) did not match expected IP ({expected_ip})")
-            except requests.exceptions.Timeout:
-                log.error(f"Request timed out. Giving up.")
-                ip_description = ip_description + (f"\n- [Error] Second IP check timed out.")
-            except requests.exceptions.RequestException as e:
-                log.error(f"IP request could not be processed. {e}")
-                ip_description = ip_description + (f"\n- [Error] Second IP verification failed.")
-
-        return ip_description
-
     def save(self) -> str:
         log.debug("Saving world")
         console = self.open()
@@ -184,9 +189,7 @@ class Client:
         # format output
         if res: # "name,playeruid,steamid\n" this is the header
             lines = res.split('\n')[1:-1] # remove the header and last elemement which is always an empty string
-            log.debug(f'Lines: {lines}')
             for line in lines:
-                log.debug(f'Line: {line}')
                 words = line.split(",")
                 if len(words) < 3:
                     log.error(f'Unable to parse player info for player, player is missing some information: {words}')

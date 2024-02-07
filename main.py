@@ -162,37 +162,17 @@ async def shutdown(interaction: discord.Interaction, seconds: int, message: str)
     description="Check server status",
 )
 async def status(interaction: discord.Interaction):
-    embed_message = None
-    error = config["generic_bot_error"]
-    try:
-        rcon_client = Client(config=config)
+    rcon_client = Client(config=config)
 
-        server_info, error_message = rcon_client.info()
+    status_title, status_description = rcon_client.status_checks()
 
-        if error_message:
-            error = error_message
-        if server_info:
-            ip_description = rcon_client.check_current_ip()
-
-            embed_message = discord.Embed(
-                title=f"Server is online.",
-                colour=discord.Colour.blurple(),
-                description=f"{server_info.name}{server_info.version}{ip_description}",
-            )
-            format_embed(embed_message)
-    except Exception as e:
-        log.error(f"Unable to fetch/send game server info: {e}")
-        
-        embed_message = discord.Embed(
-            title=f"Server is unavailable.",
-            colour=discord.Colour.blurple(),
-            description=f"We couldn't contact the server.\n\n The server may be offline, unresponsive, or the associated IP may have changed.\n\nhttps://palworld.statuspage.io/",
-        )
-        format_embed(embed_message)
-    if embed_message:
-        await interaction.response.send_message(embed=embed_message)
-    else:
-        await interaction.response.send_message(error)
+    embed_message = discord.Embed(
+        title=status_title,
+        colour=discord.Colour.blurple(),
+        description= status_description,
+    )
+    format_embed(embed_message)
+    await interaction.response.send_message(embed=embed_message)
 
 
 @tree.command(

@@ -11,14 +11,15 @@ embed_footer = "@PalCONBot"
 embed_thumbnail = "https://media.discordapp.net/attachments/631249406775132182/1201307493163335680/relaxasarus.png?ex=65c957c9&is=65b6e2c9&hm=e0a820d7130239e6ef16b6bd5ec86bdc1976c63740aaccc842ba19c29f85ecf2&=&format=webp&quality=lossless"
 generic_bot_error = "Unable to process your request"
 
-# PalCON bot and Palworld Server must be on the same local network to use this.
-# Warning: On fail, exposes the PalCON bot's current IP address to discord.
-# Leave this blank to disable this feature.
+# Set to 'true' to have PalCON check what it's current IP is. Set to 'false' to disable.
+check_public_ip = false
+# Warning: On mismatch, exposes the PalCON bot's current IP address to discord.
+# PalCON bot and Palworld Server must be on the same IP for this to work properly.
 expected_public_ip = ""
 
 # Emojis used for the /status description.
-# Can be replaced with custom emojis.
-# The bot must be in the server the emoji belongs to.
+# Default emojis work anywhere. Can be replaced with custom emojis.
+# PalCON must be in the server that any custom emojis belong to.
 embed_pass_emoji = ":white_check_mark:"
 embed_fail_emoji = ":no_entry:"
 embed_unknown_emoji = ":grey_question:"
