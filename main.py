@@ -4,7 +4,7 @@ import discord
 from discord import app_commands
 from discord.ext.commands import has_permissions
 
-from client import fetch_config, Client
+from client import fetch_config, fetch_process_info, Client
 import logger
 
 
@@ -12,6 +12,8 @@ config = fetch_config()
 log = logger.get_logger(__name__)
 
 STEAM_PROFILE_URL = "https://steamcommunity.com/profiles/{steam_id}/"
+
+palworld_info = fetch_process_info()
 
 
 class DiscordClient(discord.Client):
@@ -164,7 +166,7 @@ async def shutdown(interaction: discord.Interaction, seconds: int, message: str)
 async def status(interaction: discord.Interaction):
     rcon_client = Client(config=config)
 
-    status_title, status_description = rcon_client.status_checks()
+    status_title, status_description = rcon_client.status_checks(palworld_info)
 
     embed_message = discord.Embed(
         title=status_title,

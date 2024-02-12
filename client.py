@@ -1,5 +1,8 @@
 import tomllib
 
+import math
+
+import psutil
 import requests
 
 from rcon import Console
@@ -8,8 +11,8 @@ from rcon.async_support import Console as AsyncConsole
 from data import ServerInfo
 import logger
 
-log = logger.get_logger(__name__)
 
+log = logger.get_logger(__name__)
 
 def fetch_config():
     log.info("Fetching configuration file")
@@ -43,6 +46,17 @@ def send_command_fallback(command: str):
     return res
 
 
+# Helper functions; Convert Bytes to other formats. --------------------------------
+def convert_size(size_bytes):
+   if size_bytes == 0:
+       return "0B"
+   size_name = ("B", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB")
+   i = int(math.floor(math.log(size_bytes, 1024)))
+   p = math.pow(1024, i)
+   s = round(size_bytes / p, 2)
+   return "%s %s" % (s, size_name[i])
+
+
 # Helper functions; RCON client output parsing --------------------------------
 def get_indices_from_info(res: str) -> tuple[int, int, int]:
     version_number_start_index = -1
@@ -58,6 +72,46 @@ def get_indices_from_info(res: str) -> tuple[int, int, int]:
 
     return version_number_start_index, version_number_end_index, name_index
 
+def check_cpu_usage(process_name):
+    core_count_found = None
+    try:
+        log.debug('Determining how many cores palworld can run on.')
+        core_count = len(process_name.cpu_affinity())
+        print(f'Permitted core count found! {core_count}')
+        core_count_found = True
+    except psutil.AccessDenied as e:
+        log.warning(f'cpu affinity could not be fetched. Does the bot need admin privileges? {e}')
+        core_count_found = False
+    except Exception as e:
+        log.warning(f'cpu affinity could not be fetched. {e}')
+        core_count_found = False
+
+    if core_count_found is False:
+        log.debug('Fallback: Setting cpu affinity based on how many cores the machine has...')
+        core_count = psutil.cpu_count()
+    
+    # By default, palworld only utilizes 4 cores at a time.
+    if core_count > 4:
+        core_count = 4
+    
+    # ? Is there a better way to check CPU usage on windows?
+    # Can return over 100%.
+    """ Example: Palworld is running on 2 cores.
+        Core 1 & core 2 are at 60%
+        This will return a float of 120. """
+    cpu_usage_raw = process_name.cpu_percent(interval=2)
+    cpu_usage = (cpu_usage_raw / core_count)
+
+    if cpu_usage > 100:
+        log.warning(f'CPU is at {cpu_usage}% across {core_count} cores. Assuming user has a higher core affinity.')
+        for i in range(10):
+            cpu_usage = (cpu_usage / 2)
+            if cpu_usage <= 100:
+                break
+    
+    cpu_usage = math.trunc(cpu_usage)
+
+    return cpu_usage
 
 def fetch_current_ip(website_link, expected_ip):
     current_ip = None
@@ -78,6 +132,33 @@ def fetch_current_ip(website_link, expected_ip):
         ip_match = None
     return current_ip, ip_match
 
+# Currently supports windows dedicated servers only.
+def fetch_server_pid(palworld_process_name='PalServer-Win64-Test-Cmd.exe'):
+    palworld_process_pid = None
+
+    log.info('Finding palworld server pid...')
+    for proc in psutil.process_iter():
+        if proc.name() == palworld_process_name:
+            palworld_process_pid = proc.pid
+            break
+    if palworld_process_pid is None:
+        log.error(f'Palworld server pid could not be found.')
+    else:
+        log.debug(f'Palworld pid found: {palworld_process_pid}')
+    return palworld_process_pid
+
+def fetch_process_info(process_info=None):
+    if process_info is None:
+        log.debug('Palworld PID not supplied.')
+        process_pid = fetch_server_pid()
+    
+    if process_pid is None:
+        return False
+    
+    log.info("Fetching process info.")
+    process_info = psutil.Process(process_pid)
+
+    return process_info 
 
 # ------------------------------------------------------------------------------
 # Synchronous implementation; manually starts and stops a connection with every command
@@ -100,6 +181,7 @@ class Client:
             current_ip, ip_match = fetch_current_ip('http://ipgrab.io', expected_ip)
 
         match ip_match:
+            # TODO REFACT messages to new inline code.
             case True:
                 emoji_pass = self.CONFIG["embed_pass_emoji"]
                 ip_result = (f"{emoji_pass} - IP address")
@@ -112,9 +194,59 @@ class Client:
 
         return ip_result
     
+    def check_current_resources(self, palworld_process, check_cpu, check_ram):
+        cpu_usage = None
+        ram_available = None
+        res = ""
+
+        if palworld_process.is_running():
+            log.debug(f'Palworld server is still running on pid {palworld_process.pid}')
+        else:
+            log.warning('Palworld is no longer running.')
+            palworld_process = fetch_process_info()
+
+        if palworld_process is False:
+            log.error('Palworld process not found. Unable to check current palworld resources.')
+            return cpu_usage, ram_available
+
+        emoji_pass = self.CONFIG["embed_pass_emoji"]
+        emoji_fail = self.CONFIG["embed_fail_emoji"]
+        emoji_unknown = self.CONFIG["embed_unknown_emoji"]
+
+        # TODO REFACT messages to new inline code.
+        if check_cpu:
+            cpu_usage = check_cpu_usage(palworld_process)
+
+            if cpu_usage < 50:
+                res = (f"{emoji_pass} - CPU {cpu_usage}% used")
+            elif cpu_usage < 80:
+                res = (f"{emoji_pass} - CPU {cpu_usage}% used")
+            elif cpu_usage < 100:
+                res = (f"{emoji_fail} - CPU {cpu_usage}% used")
+            else:
+                res = (f"{emoji_unknown} - CPU: Unknown")
+        
+        if check_ram:
+            # TODO move to discord embed logic.
+            if check_cpu:
+                res = res + "\n"
+            memory_info = psutil.virtual_memory()
+            ram_available = convert_size(memory_info.free)
+
+            if memory_info.free <= 1073741824: # 1GB or less
+                log.warning('Palworld server has less than 1GB of RAM available.')
+                res = res + (f"{emoji_fail} - RAM: {ram_available} available")
+            elif memory_info.free > 1073741824:
+                res = res + (f"{emoji_pass} - RAM: {ram_available} available")
+            else:
+                res = res + (f"{emoji_unknown}- RAM: Unknown.")
+        return res
+
     # Main function to handle all checks in /status
-    def status_checks(self):
+    def status_checks(self, palworld_process):
         check_public_ip = self.CONFIG["check_public_ip"]
+        check_cpu = self.CONFIG["check_cpu"]
+        check_ram = self.CONFIG["check_ram"]
         description_list = []
 
         try:
@@ -126,11 +258,15 @@ class Client:
             log.error(f"Unable to fetch/send game server info: {e}")
             embed_title = "Server is unavailable."
             description_list.append("We couldn't contact the server.\nhttps://palworld.statuspage.io/")
-            
+        if check_public_ip or check_cpu or check_ram:
+            description_list.append("\n[Checks]")
+        # # TODO remove redundant check, to be added in future inline code.
         if check_public_ip:
             description_list.append(self.check_current_ip())
-        
-        embed_description='\n\n'.join(description_list)
+        if check_cpu or check_ram:
+            description_list.append(self.check_current_resources(palworld_process, check_cpu, check_ram))
+
+        embed_description='\n'.join(description_list)
 
         return embed_title, embed_description
 
