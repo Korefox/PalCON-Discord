@@ -130,6 +130,13 @@ def fetch_current_ip(website_link, expected_ip):
     except requests.exceptions.RequestException as e:
         log.error(f"IP request could not be processed. {e}")
         ip_match = None
+    
+    # ipv6 addresses are expected to be 40 characters max. Prevent invalid html responses.
+    if len(current_ip) > 45:
+        log.error(f"Invalid IP format returned.")
+        current_ip = None
+        ip_match = None
+    
     return current_ip, ip_match
 
 # Currently supports windows dedicated servers only.
@@ -178,7 +185,10 @@ class Client:
 
         if not ip_match:
             log.info(f"Fetching current public IP from ipgrab...")
-            current_ip, ip_match = fetch_current_ip('http://ipgrab.io', expected_ip)
+            current_ip_retry, ip_match_retry = fetch_current_ip('https://ipecho.net/plain', expected_ip)
+            # If this check fails, just ignore it.
+            if ip_match_retry:
+                ip_match = ip_match_retry
 
         match ip_match:
             # TODO REFACT messages to new inline code.
