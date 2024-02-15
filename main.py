@@ -176,6 +176,7 @@ async def shutdown_error(interaction: discord.Interaction, error: app_commands.A
     description="Check server status",
 )
 async def status(interaction: discord.Interaction):
+    await interaction.response.defer()
     rcon_client = Client(config=config)
 
     status_title, status_description = rcon_client.status_checks(palworld_info)
@@ -186,7 +187,7 @@ async def status(interaction: discord.Interaction):
         description= status_description,
     )
     format_embed(embed_message)
-    await interaction.response.send_message(embed=embed_message)
+    await interaction.followup.send(embed=embed_message)
 
 
 @tree.command(
