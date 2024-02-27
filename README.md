@@ -1,3 +1,6 @@
+Note: As of palworld version 1.5.0, it appears that you MUST add `-RCONPort=25575` (change the number to your desired port) as a command line argument. If a commandline argument is not specified, then the client is not allowing connections even if the port is configured in the `PalWorldSettings.ini` file. To quickly do this on windows without using terminal, right-click `PalServer.exe`, send to desktop as a shortcut. Then add the commandline argument to the end of the target path.
+![ShortcutProperies](https://i.imgur.com/pQAr9b9.png)
+
 # Modification mentions
 This version of PalCON-Discord originates from [KOOKIIEStudios' project](https://github.com/KOOKIIEStudios/PalCON-Discord) and cherry-picks code from [alexraskin's palCON repo](https://github.com/alexraskin/PalCON-Discord).
 
